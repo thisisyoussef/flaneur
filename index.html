@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Flâneur: take the scenic route</title>
+<meta name="description" content="Flâneur finds the walk worth taking: routes past parks, beautiful buildings, cafés and life, a minute or two longer than the fastest way." />
+<meta name="theme-color" content="#1F3D2B" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icon-180.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Flâneur" />
+<meta property="og:title" content="Flâneur: take the scenic route" />
+<meta property="og:description" content="Maps that optimize for beauty, serendipity and aliveness, not just speed." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<link href="style.css" rel="stylesheet" />
+</head>
+<body>
+<div id="map"></div>
+
+<section id="panel" aria-label="Plan a walk">
+  <div class="grab" id="grab"></div>
+  <header class="brand">
+    <img src="icon.svg" alt="" class="logo" />
+    <div>
+      <h1>Flâneur</h1>
+      <p class="tag">Take the scenic route.</p>
+    </div>
+  </header>
+
+  <form id="form" autocomplete="off">
+    <div class="field">
+      <span class="dot start"></span>
+      <input id="from" placeholder="Starting point" aria-label="From" />
+      <button type="button" id="locate" class="ghost" title="Use my location" aria-label="Use my location">◎</button>
+      <ul class="suggest" id="from-s"></ul>
+    </div>
+    <div class="field">
+      <span class="dot end"></span>
+      <input id="to" placeholder="Where to?" aria-label="To" />
+      <ul class="suggest" id="to-s"></ul>
+    </div>
+
+    <label class="slider">
+      <div class="slider-labels"><span>Fastest</span><span id="detour-label">up to +20%</span><span>Most alive</span></div>
+      <input type="range" id="alive" min="0" max="100" value="60" />
+    </label>
+
+    <div class="chips" id="chips">
+      <button type="button" class="chip on" data-k="green">🌳 Green</button>
+      <button type="button" class="chip on" data-k="life">☕ Cafés &amp; life</button>
+      <button type="button" class="chip on" data-k="arch">🏛 Architecture</button>
+      <button type="button" class="chip on" data-k="water">💧 Water</button>
+      <button type="button" class="chip" data-k="quiet">🤫 Quiet streets</button>
+    </div>
+
+    <button type="submit" class="primary" id="go">Find the scenic route</button>
+  </form>
+
+  <div id="status" class="status" hidden></div>
+  <ol id="routes" class="routes"></ol>
+
+  <footer class="foot">
+    Maps © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors · <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · routing <a href="https://routing.openstreetmap.de" target="_blank" rel="noopener">FOSSGIS OSRM</a>
+  </footer>
+</section>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
