@@ -151,7 +151,7 @@ updateDetourLabel();
 async function osrm(coords) {
   const path = coords.map((c) => `${c[0].toFixed(6)},${c[1].toFixed(6)}`).join(";");
   const alt = coords.length === 2 ? "&alternatives=3" : "";
-  const r = await fetch(`${OSRM}${path}?overview=full&geometries=geojson&continue_straight=false${alt}`);
+  const r = await fetch(`${OSRM}${path}?overview=full&geometries=geojson&continue_straight=false${alt}`, { signal: AbortSignal.timeout(15000) }).catch(() => { throw new Error("Routing is slow right now. Try again in a moment."); });
   if (!r.ok) throw new Error("Routing is busy. Try again in a moment.");
   const j = await r.json();
   if (j.code !== "Ok") throw new Error("No walking route found.");
@@ -180,7 +180,7 @@ out center bb tags qt 4000;`;
   let lastErr;
   for (const url of OVERPASS) {
     try {
-      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: AbortSignal.timeout(20000) });
       if (!r.ok) throw new Error(r.status);
       const j = await r.json();
       return j.elements.map(classify).filter(Boolean);
