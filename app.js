@@ -11,14 +11,15 @@ const $ = (s) => document.querySelector(s);
 const state = { from: null, to: null, routes: [], sel: 0, pois: [], prefs: new Set(["green", "life", "arch", "water"]) };
 
 // ---------- map ----------
-const map = new maplibregl.Map({
-  container: "map",
-  style: "https://tiles.openfreemap.org/styles/positron",
-  center: [-83.1497, 42.5803],
-  zoom: 13,
-  attributionControl: { compact: true },
-});
-map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+const map = L.map("map", { zoomControl: false, attributionControl: true }).setView([42.5803, -83.1497], 13);
+L.control.zoom({ position: "topright" }).addTo(map);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+  maxZoom: 19, subdomains: "abcd",
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+}).addTo(map);
+const routeLayer = L.layerGroup().addTo(map);
+const toLL = (c) => [c[1], c[0]];
+const center = () => { const c = center(); return { lat: c.lat, lng: c.lng }; };
 const markers = { from: null, to: null };
 let poiMarkers = [];
 
@@ -58,7 +59,7 @@ function setupSuggest(inputId, listId, key) {
     const q = input.value.trim();
     if (q.length < 3) { list.innerHTML = ""; return; }
     t = setTimeout(async () => {
-      const c = map.getCenter();
+      const c = center();
       try {
         const r = await fetch(`${PHOTON}?q=${encodeURIComponent(q)}&limit=5&lat=${c.lat}&lon=${c.lng}`);
         const j = await r.json();
@@ -93,7 +94,7 @@ function setupSuggest(inputId, listId, key) {
   input.addEventListener("blur", () => setTimeout(() => (list.innerHTML = ""), 150));
 }
 async function geocodeOnce(q) {
-  const c = map.getCenter();
+  const c = center();
   const r = await fetch(`${PHOTON}?q=${encodeURIComponent(q)}&limit=1&lat=${c.lat}&lon=${c.lng}`);
   const j = await r.json();
   if (!j.features.length) throw new Error(`Couldn't find “${q}”`);
@@ -103,14 +104,14 @@ function placeMarker(key) {
   if (markers[key]) markers[key].remove();
   const el = document.createElement("div");
   el.style.cssText = `width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);background:${key === "from" ? "#1F3D2B" : "#E4572E"}`;
-  markers[key] = new maplibregl.Marker({ element: el }).setLngLat(state[key].ll).addTo(map);
+  markers[key] = L.marker(toLL(state[key].ll), { icon: L.divIcon({ html: el.outerHTML, className: "", iconSize: [18, 18], iconAnchor: [9, 9] }), zIndexOffset: 1000 }).addTo(map);
   if (state.from && state.to) fitTo([state.from.ll, state.to.ll]);
-  else map.flyTo({ center: state[key].ll, zoom: 15 });
+  else map.flyTo(toLL(state[key].ll), 15);
 }
 function fitTo(coords) {
-  const b = coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
+  const b = L.latLngBounds(coords.map(toLL));
   const mobile = innerWidth < 700;
-  map.fitBounds(b, { padding: mobile ? { top: 60, bottom: innerHeight * 0.6, left: 30, right: 30 } : { top: 60, bottom: 60, left: 450, right: 60 }, duration: 700 });
+  map.fitBounds(b, mobile ? { paddingTopLeft: [30, 60], paddingBottomRight: [30, Math.round(innerHeight * 0.6)] } : { paddingTopLeft: [450, 60], paddingBottomRight: [60, 60] });
 }
 
 $("#locate").addEventListener("click", () => {
@@ -200,6 +201,7 @@ function classify(el) {
   else if (t.amenity === "fountain") { k = "water"; radius = 40; w = 1; }
   else if (t.historic || t.heritage || /^(artwork|attraction|museum|gallery|viewpoint)$/.test(t.tourism) || t.amenity === "place_of_worship") { k = "arch"; radius = 55; w = name ? 2 : 1; }
   else if (t.amenity || t.shop) { k = "life"; radius = 35; w = t.amenity === "cafe" || t.shop === "bakery" || t.shop === "books" ? 1.4 : 1; }
+  else if (/^(pedestrian|footway|path|living_street)$/.test(t.highway) && /river|lake|harbou?r|canal|water|creek|pier/i.test(name)) { k = "water"; radius = 30; w = 2.5; }
   else if (/^(pedestrian|footway|path|living_street)$/.test(t.highway)) { k = "quiet"; radius = 25; w = 1.2; }
   else if (/^(trunk|primary|motorway)$/.test(t.highway)) { k = "loud"; radius = 30; w = 1; }
   if (!k) return null;
@@ -401,12 +403,17 @@ function title(r, i) {
   const s = r.sub;
   const top = Object.entries(s).filter(([k]) => state.prefs.has(k)).sort((x, y) => y[1] - x[1])[0];
   const names = { green: "The green way", life: "The lively way", arch: "The beautiful way", water: "The waterside way", quiet: "The quiet way" };
-  return i === 0 ? "The scenic route" : names[top?.[0]] || "The wander";
+  if (i === 0) return "The scenic route";
+  const used = state.routes.slice(0, i).map((x, j) => x._title);
+  let t = names[top?.[0]] || "The wander";
+  if (used.includes(t)) t = ["The wander", "The detour", "The long way round"].find((x) => !used.includes(x));
+  return t;
 }
 function fmtMin(s) { return Math.max(1, Math.round(s / 60)); }
 
 function list() {
   const f = state.fastest;
+  state.routes.forEach((r, i) => (r._title = title(r, i)));
   $("#routes").innerHTML = state.routes.map((r, i) => {
     const extra = fmtMin(r.dur) - fmtMin(f.dur);
     const color = r === f ? FAST_COLOR : COLORS[i % COLORS.length];
@@ -417,7 +424,7 @@ function list() {
     if (r.near.water.length) tags.push(`💧 ${r.near.water.length}`);
     const gmaps = gmapsLink(r);
     return `<li class="route ${i === state.sel ? "sel" : ""}" data-i="${i}">
-      <div class="top"><h3><span class="swatch" style="background:${color}"></span>${esc(title(r, i))}</h3>
+      <div class="top"><h3><span class="swatch" style="background:${color}"></span>${esc(r._title)}</h3>
       <span class="time">${fmtMin(r.dur)} min ${r !== f && extra > 0 ? `<span class="extra">+${extra}</span>` : r !== f ? `<span class="extra">same time</span>` : ""}</span></div>
       <p class="why">${esc(describe(r))}</p>
       <div class="bar" title="Aliveness"><i style="width:${Math.round(r.alive * 100)}%"></i></div>
@@ -448,22 +455,15 @@ function gmapsLink(r) {
 }
 
 function draw(fit) {
-  const feats = state.routes.map((r, i) => ({
-    type: "Feature",
-    properties: { i, sel: i === state.sel ? 1 : 0, color: r === state.fastest ? FAST_COLOR : COLORS[i % COLORS.length] },
-    geometry: { type: "LineString", coordinates: r.line },
-  }));
-  feats.sort((x, y) => x.properties.sel - y.properties.sel);
-  const data = { type: "FeatureCollection", features: feats };
-  if (map.getSource("routes")) map.getSource("routes").setData(data);
-  else {
-    map.addSource("routes", { type: "geojson", data });
-    map.addLayer({ id: "routes-casing", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#fff", "line-width": ["case", ["==", ["get", "sel"], 1], 10, 6] } });
-    map.addLayer({ id: "routes-line", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": ["case", ["==", ["get", "sel"], 1], 6, 3], "line-opacity": ["case", ["==", ["get", "sel"], 1], 1, 0.55] } });
-    map.on("click", "routes-line", (e) => {
-      state.sel = e.features[0].properties.i;
-      draw(false); list();
-    });
+  routeLayer.clearLayers();
+  const order = state.routes.map((r, i) => i).sort((x, y) => (x === state.sel) - (y === state.sel));
+  for (const i of order) {
+    const r = state.routes[i], sel = i === state.sel;
+    const color = r === state.fastest ? FAST_COLOR : COLORS[i % COLORS.length];
+    const ll = r.line.map(toLL);
+    L.polyline(ll, { color: "#fff", weight: sel ? 11 : 7, opacity: 0.9, lineCap: "round", lineJoin: "round" }).addTo(routeLayer);
+    L.polyline(ll, { color, weight: sel ? 6 : 4, opacity: sel ? 1 : 0.6, lineCap: "round", lineJoin: "round", dashArray: r === state.fastest ? "1 9" : null })
+      .on("click", () => { state.sel = i; draw(false); list(); }).addTo(routeLayer);
   }
   // POIs on selected route
   poiMarkers.forEach((m) => m.remove());
@@ -475,7 +475,7 @@ function draw(fit) {
     const el = document.createElement("div");
     el.textContent = icons[p.k];
     el.style.cssText = "font-size:16px;background:#FBF6EC;border-radius:50%;width:26px;height:26px;display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer";
-    poiMarkers.push(new maplibregl.Marker({ element: el }).setLngLat(p.ll).setPopup(new maplibregl.Popup({ offset: 14, closeButton: false }).setHTML(`<div class="poi-pop">${esc(p.name)}</div>`)).addTo(map));
+    poiMarkers.push(L.marker(toLL(p.ll), { icon: L.divIcon({ html: el.outerHTML, className: "", iconSize: [26, 26], iconAnchor: [13, 13] }) }).bindPopup(`<div class="poi-pop">${esc(p.name)}</div>`, { closeButton: false }).addTo(map));
   }
   if (fit) fitTo(state.routes.flatMap((r) => r.line));
 }
@@ -494,13 +494,13 @@ $("#grab").addEventListener("click", () => $("#panel").classList.toggle("min"));
 const qs = new URLSearchParams(location.search);
 function parseLL(v) { const m = v && v.split(",").map(Number); return m && m.length === 2 && m.every(Number.isFinite) ? [m[1], m[0]] : null; }
 const qf = parseLL(qs.get("from")), qt = parseLL(qs.get("to"));
-map.on("load", () => {
+setTimeout(() => {
   if (qf && qt) {
     state.from = { name: "Start", ll: qf }; state.to = { name: "Destination", ll: qt };
     $("#from").value = qs.get("fromName") || "Start";
     $("#to").value = qs.get("toName") || "Destination";
     search();
   }
-});
+}, 0);
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
