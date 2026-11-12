@@ -174,7 +174,7 @@ async function overpass(bbox) {
   way["highway"~"^(pedestrian|footway|path|living_street)$"]["name"](${b});
   way["highway"~"^(trunk|primary|motorway)$"](${b});
 );
-out center tags qt 4000;`;
+out center bb tags qt 4000;`;
   let lastErr;
   for (const url of OVERPASS) {
     try {
@@ -203,7 +203,9 @@ function classify(el) {
   else if (/^(pedestrian|footway|path|living_street)$/.test(t.highway)) { k = "quiet"; radius = 25; w = 1.2; }
   else if (/^(trunk|primary|motorway)$/.test(t.highway)) { k = "loud"; radius = 30; w = 1; }
   if (!k) return null;
-  return { k, ll, name, radius, w, kind: t.amenity || t.shop || t.leisure || t.historic || t.tourism || t.natural || t.waterway || t.landuse || t.highway };
+  const bb = el.bounds ? [el.bounds.minlon, el.bounds.minlat, el.bounds.maxlon, el.bounds.maxlat] : null;
+  if (bb && (k === "green" || k === "water")) radius = 35;
+  return { k, ll, bb, name, radius, w, kind: t.amenity || t.shop || t.leisure || t.historic || t.tourism || t.natural || t.waterway || t.landuse || t.highway };
 }
 
 // ---------- scoring ----------
@@ -216,7 +218,8 @@ function scoreRoute(rt, pois) {
   const line = simplify(rt.line);
   for (const p of pois) {
     if (p.ll[0] < w - pad || p.ll[0] > e + pad || p.ll[1] < s - pad || p.ll[1] > n + pad) continue;
-    if (distToLine(p.ll, line) <= p.radius) near[p.k].push(p);
+    if (p.bb && touchesBox(line, p.bb, p.radius)) near[p.k].push(p);
+    else if (!p.bb && distToLine(p.ll, line) <= p.radius) near[p.k].push(p);
   }
   const km = Math.max(0.3, rt.dist / 1000);
   const sum = (arr) => arr.reduce((a, p) => a + p.w, 0);
@@ -232,6 +235,12 @@ function scoreRoute(rt, pois) {
   rt.sub = sub;
   rt.loud = loud;
   return rt;
+}
+function touchesBox(line, bb, m) {
+  const dLat = m / 111320, dLon = dLat / Math.cos(rad(bb[1]));
+  // ignore giant areas (whole-city landuse) to avoid false positives
+  if ((bb[2] - bb[0]) * (bb[3] - bb[1]) > 0.0004) return false;
+  return line.some((c) => c[0] >= bb[0] - dLon && c[0] <= bb[2] + dLon && c[1] >= bb[1] - dLat && c[1] <= bb[3] + dLat);
 }
 function aliveness(rt) {
   const keys = [...state.prefs];
@@ -333,6 +342,8 @@ async function search() {
     const u = new URL(location);
     u.searchParams.set("from", `${a[1].toFixed(5)},${a[0].toFixed(5)}`);
     u.searchParams.set("to", `${b[1].toFixed(5)},${b[0].toFixed(5)}`);
+    u.searchParams.set("fromName", $("#from").value);
+    u.searchParams.set("toName", $("#to").value);
     history.replaceState(null, "", u);
   } catch (e) {
     status(e.message || "Something went wrong.");
@@ -354,12 +365,13 @@ function rerank(fit) {
   pool.sort((x, y) => y.rank - x.rank);
   const picks = [];
   for (const r of pool) {
-    if (r.alive <= f.alive + 0.03) continue;
-    if (picks.some((p) => overlap(p, r) > 0.8) || overlap(f, r) > 0.9) continue;
+    if (r.alive <= f.alive + 0.005) continue;
+    if (picks.some((p) => overlap(p, r) > 0.85) || overlap(f, r) > 0.92) continue;
     picks.push(r);
     if (picks.length === 3) break;
   }
   state.routes = alive.value < 5 ? [f] : [...picks, f];
+  if (alive.value >= 5 && !picks.length) setTimeout(() => status("The fastest way is already the most alive one here. Slide right for longer wanders."), 0);
   state.sel = 0;
   draw(fit);
   list();
@@ -382,7 +394,7 @@ function describe(r) {
   else if (n.arch.length) bits.push(`${n.arch.length} landmark${n.arch.length > 1 ? "s" : ""}`);
   const water = named(n.water)[0];
   if (water) bits.push(`along ${water.name}`);
-  return bits.slice(0, 3).join(" · ") || "a calmer, greener way";
+  return bits.slice(0, 3).join(" · ") || (r === state.fastest ? "the direct way" : "a calmer way through quieter streets");
 }
 function title(r, i) {
   if (r === state.fastest) return "The fastest way";
@@ -447,7 +459,7 @@ function draw(fit) {
   else {
     map.addSource("routes", { type: "geojson", data });
     map.addLayer({ id: "routes-casing", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#fff", "line-width": ["case", ["==", ["get", "sel"], 1], 10, 6] } });
-    map.addLayer({ id: "routes-line", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": ["case", ["==", ["get", "sel"], 1], 6, 3], "line-opacity": ["case", ["==", ["get", "sel"], 1], 1, 0.55], "line-dasharray": [1, 0] } });
+    map.addLayer({ id: "routes-line", type: "line", source: "routes", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": ["case", ["==", ["get", "sel"], 1], 6, 3], "line-opacity": ["case", ["==", ["get", "sel"], 1], 1, 0.55] } });
     map.on("click", "routes-line", (e) => {
       state.sel = e.features[0].properties.i;
       draw(false); list();
