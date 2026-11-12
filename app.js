@@ -20,7 +20,7 @@ L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 const routeLayer = L.layerGroup().addTo(map);
 const toLL = (c) => [c[1], c[0]];
-const center = () => { const c = center(); return { lat: c.lat, lng: c.lng }; };
+const center = () => { const c = map.getCenter(); return { lat: c.lat, lng: c.lng }; };
 const markers = { from: null, to: null };
 let poiMarkers = [];
 
