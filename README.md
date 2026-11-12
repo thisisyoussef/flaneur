@@ -1,12 +1,15 @@
-# Flâneur for iOS
+# Flâneur: take the scenic route
 
-SwiftUI shell (intro + native location permission) around the Flâneur engine, handing turn-by-turn to Apple/Google Maps.
+Maps that optimize for beauty, serendipity and aliveness instead of speed.
+Flâneur shows the fastest walk next to up to three scenic alternatives
+("+2 min · past Boulan Park · 4 cafés"), and a slider trades minutes for life.
 
-## Ship to TestFlight
-1. Create the app in App Store Connect: bundle ID `com.youssefa.flaneur`, name "Flâneur" (or "Flâneur: Scenic Walks").
-2. App Store Connect → Users and Access → Integrations → create an API key (App Manager). Note Key ID, Issuer ID, download the .p8.
-3. Repo secrets: `APPLE_TEAM_ID`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` (file contents).
-4. Move `ios/ci/ios.yml` to `.github/workflows/ios.yml` (needs a token with workflow scope, or do it in the GitHub web editor).
-5. Push or run the workflow: it compiles, archives, and uploads. The build shows up in TestFlight in ~10–20 min.
+**How it works**
+1. Fastest walking route from OSRM (FOSSGIS public foot router).
+2. Pulls parks, water, cafés, shops, landmarks, heritage buildings, pedestrian streets and busy roads around the trip from OpenStreetMap (Overpass).
+3. Generates candidates through the best nearby anchors (parks, café clusters, landmarks), scores each route by what you actually pass within a few dozen meters, per km, with a variety bonus and a busy-road penalty.
+4. Ranks by aliveness minus a time penalty set by the slider. Hand off to Google/Apple Maps for turn-by-turn.
 
-Local alternative: `brew install xcodegen && cd ios && DEVELOPMENT_TEAM=XXXX xcodegen generate && open Flaneur.xcodeproj`, then Product → Archive → Distribute.
+No API keys. Static site: `index.html`, `app.js`, `style.css`. iOS app in `ios/`.
+
+Data © OpenStreetMap contributors. Tiles: OpenFreeMap. Geocoding: Photon (komoot).
