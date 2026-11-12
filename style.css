@@ -1,0 +1,58 @@
+:root{
+  --ever:#1F3D2B; --ever2:#2E5A3F; --gold:#F2A541; --coral:#E4572E;
+  --cream:#FBF6EC; --ink:#1B1B18; --mute:#6B6A62; --line:#E7DFCD;
+  --serif:"Fraunces",Georgia,serif; --sans:"Inter",system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:var(--sans);color:var(--ink);background:var(--cream)}
+#map{position:fixed;inset:0}
+#panel{position:fixed;top:16px;left:16px;bottom:16px;width:400px;max-width:calc(100vw - 32px);
+  background:var(--cream);border-radius:22px;box-shadow:0 12px 40px rgba(31,61,43,.18);
+  padding:20px 20px 12px;overflow:auto;z-index:2;display:flex;flex-direction:column}
+.grab{display:none}
+.brand{display:flex;gap:12px;align-items:center;margin-bottom:16px}
+.logo{width:44px;height:44px}
+h1{font-family:var(--serif);font-weight:700;font-size:28px;margin:0;color:var(--ever);letter-spacing:-.5px}
+.tag{margin:0;color:var(--mute);font-family:var(--serif);font-style:italic}
+.field{position:relative;display:flex;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;margin-bottom:8px;padding:0 10px}
+.field input{flex:1;border:0;outline:0;padding:13px 8px;font:500 15px var(--sans);background:transparent}
+.dot{width:10px;height:10px;border-radius:50%}
+.dot.start{background:var(--ever)} .dot.end{background:var(--coral)}
+.ghost{border:0;background:none;font-size:18px;color:var(--ever);cursor:pointer;padding:6px}
+.suggest{position:absolute;top:100%;left:0;right:0;margin:4px 0 0;padding:4px;list-style:none;background:#fff;border:1px solid var(--line);border-radius:12px;z-index:5;box-shadow:0 8px 24px rgba(0,0,0,.08)}
+.suggest:empty{display:none}
+.suggest li{padding:9px 10px;border-radius:8px;cursor:pointer;font-size:14px}
+.suggest li small{display:block;color:var(--mute)}
+.suggest li:hover,.suggest li.act{background:var(--cream)}
+.slider{display:block;margin:14px 2px 8px}
+.slider-labels{display:flex;justify-content:space-between;font-size:12px;color:var(--mute);margin-bottom:6px}
+#detour-label{color:var(--ever);font-weight:600}
+input[type=range]{width:100%;accent-color:var(--ever)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 14px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 11px;font:500 13px var(--sans);cursor:pointer;color:var(--mute)}
+.chip.on{background:var(--ever);border-color:var(--ever);color:#fff}
+.primary{width:100%;border:0;border-radius:14px;padding:14px;background:var(--gold);color:var(--ever);font:700 16px var(--sans);cursor:pointer}
+.primary:disabled{opacity:.6}
+.status{margin:14px 2px 0;color:var(--mute);font-size:14px}
+.routes{list-style:none;padding:0;margin:14px 0 0;display:flex;flex-direction:column;gap:10px}
+.route{background:#fff;border:2px solid transparent;border-radius:16px;padding:12px 14px;cursor:pointer;transition:border .15s}
+.route.sel{border-color:var(--ever)}
+.route .top{display:flex;justify-content:space-between;align-items:baseline}
+.route h3{margin:0;font-family:var(--serif);font-size:18px;color:var(--ever)}
+.route .time{font-weight:600}
+.route .extra{color:var(--coral);font-weight:600;font-size:13px}
+.route .why{margin:6px 0 0;font-size:14px;color:var(--ink)}
+.route .bar{height:6px;border-radius:6px;background:var(--line);margin-top:8px;overflow:hidden}
+.route .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--ever2),var(--gold))}
+.route .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.route .tags span{font-size:12px;background:var(--cream);border-radius:999px;padding:3px 8px}
+.route .open{display:inline-block;margin-top:10px;font-size:13px;color:var(--ever);font-weight:600;text-decoration:none}
+.swatch{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle}
+.foot{margin-top:auto;padding-top:14px;font-size:11px;color:var(--mute)}
+.foot a{color:var(--mute)}
+.poi-pop{font:500 13px var(--sans)}
+@media (max-width:700px){
+  #panel{top:auto;left:0;right:0;bottom:0;width:100%;max-width:none;max-height:72vh;border-radius:22px 22px 0 0;padding-bottom:calc(12px + env(safe-area-inset-bottom))}
+  .grab{display:block;width:40px;height:5px;border-radius:3px;background:var(--line);margin:-8px auto 10px}
+  #panel.min{max-height:150px}
+}
