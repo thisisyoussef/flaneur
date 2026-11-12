@@ -56,3 +56,5 @@ input[type=range]{width:100%;accent-color:var(--ever)}
   .grab{display:block;width:40px;height:5px;border-radius:3px;background:var(--line);margin:-8px auto 10px}
   #panel.min{max-height:150px}
 }
+
+.tiles{filter:saturate(.55) sepia(.12) brightness(1.03)}

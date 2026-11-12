@@ -1,3 +1,4 @@
+if (typeof L === "undefined" && !sessionStorage.fl_reload) { sessionStorage.fl_reload = 1; location.reload(); }
 // Flâneur: take the scenic route.
 // Open data only: OpenFreeMap tiles, Photon geocoding, FOSSGIS OSRM foot routing, Overpass POIs.
 
@@ -13,9 +14,9 @@ const state = { from: null, to: null, routes: [], sel: 0, pois: [], prefs: new S
 // ---------- map ----------
 const map = L.map("map", { zoomControl: false, attributionControl: true }).setView([42.5803, -83.1497], 13);
 L.control.zoom({ position: "topright" }).addTo(map);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-  maxZoom: 19, subdomains: "abcd",
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19, className: "tiles",
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
 }).addTo(map);
 const routeLayer = L.layerGroup().addTo(map);
 const toLL = (c) => [c[1], c[0]];
@@ -111,7 +112,7 @@ function placeMarker(key) {
 function fitTo(coords) {
   const b = L.latLngBounds(coords.map(toLL));
   const mobile = innerWidth < 700;
-  map.fitBounds(b, mobile ? { paddingTopLeft: [30, 60], paddingBottomRight: [30, Math.round(innerHeight * 0.6)] } : { paddingTopLeft: [450, 60], paddingBottomRight: [60, 60] });
+  map.fitBounds(b, mobile ? { paddingTopLeft: [30, 60], paddingBottomRight: [30, Math.round(innerHeight * 0.74)] } : { paddingTopLeft: [450, 60], paddingBottomRight: [60, 60] });
 }
 
 $("#locate").addEventListener("click", () => {
@@ -441,6 +442,7 @@ $("#routes").addEventListener("click", (e) => {
   draw(false);
   list();
 });
+function showSel() { const el = document.querySelector('.route.sel'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
 
 function gmapsLink(r) {
   const a = state.from.ll, b = state.to.ll;
@@ -463,7 +465,7 @@ function draw(fit) {
     const ll = r.line.map(toLL);
     L.polyline(ll, { color: "#fff", weight: sel ? 11 : 7, opacity: 0.9, lineCap: "round", lineJoin: "round" }).addTo(routeLayer);
     L.polyline(ll, { color, weight: sel ? 6 : 4, opacity: sel ? 1 : 0.6, lineCap: "round", lineJoin: "round", dashArray: r === state.fastest ? "1 9" : null })
-      .on("click", () => { state.sel = i; draw(false); list(); }).addTo(routeLayer);
+      .on("click", () => { state.sel = i; draw(false); list(); showSel(); $("#panel").classList.remove("min"); }).addTo(routeLayer);
   }
   // POIs on selected route
   poiMarkers.forEach((m) => m.remove());
