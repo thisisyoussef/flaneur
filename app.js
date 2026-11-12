@@ -1,4 +1,4 @@
-if (typeof L === "undefined" && !sessionStorage.fl_reload) { sessionStorage.fl_reload = 1; location.reload(); }
+import * as G from "./google.js";
 // Flâneur: take the scenic route.
 // Open data only: OpenFreeMap tiles, Photon geocoding, FOSSGIS OSRM foot routing, Overpass POIs.
 
@@ -12,15 +12,39 @@ const $ = (s) => document.querySelector(s);
 const state = { from: null, to: null, routes: [], sel: 0, pois: [], prefs: new Set(["green", "life", "arch", "water"]) };
 
 // ---------- map ----------
-const map = L.map("map", { zoomControl: false, attributionControl: true }).setView([42.5803, -83.1497], 13);
-L.control.zoom({ position: "topright" }).addTo(map);
-L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19, className: "tiles",
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-}).addTo(map);
-const routeLayer = L.layerGroup().addTo(map);
+const START = [42.5803, -83.1497];
 const toLL = (c) => [c[1], c[0]];
-const center = () => { const c = map.getCenter(); return { lat: c.lat, lng: c.lng }; };
+function leafletMap() {
+  const map = L.map("map", { zoomControl: false, attributionControl: true }).setView(START, 13);
+  L.control.zoom({ position: "topright" }).addTo(map);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, className: "tiles", attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(map);
+  const layer = L.layerGroup().addTo(map);
+  return {
+    kind: "osm",
+    center() { const c = map.getCenter(); return { lat: c.lat, lng: c.lng }; },
+    marker(ll, html, o = {}) {
+      const m = L.marker(toLL(ll), { icon: L.divIcon({ html, className: "", iconSize: o.size, iconAnchor: o.size.map((x) => x / 2) }), zIndexOffset: o.z || 0 }).addTo(map);
+      if (o.title) m.bindPopup(`<div class="poi-pop">${o.titleHtml}</div>`, { closeButton: false });
+      return m;
+    },
+    clearLines() { layer.clearLayers(); },
+    line(coords, st, onClick) {
+      const pl = L.polyline(coords.map(toLL), { color: st.color, weight: st.weight, opacity: st.opacity, lineCap: "round", lineJoin: "round", dashArray: st.dash ? "1 9" : null }).addTo(layer);
+      if (onClick) pl.on("click", onClick);
+    },
+    fit(coords, p) { map.fitBounds(L.latLngBounds(coords.map(toLL)), { paddingTopLeft: [p.left, p.top], paddingBottomRight: [p.right, p.bottom] }); },
+    flyTo(ll, z) { map.flyTo(toLL(ll), z); },
+  };
+}
+const USE_G = !!window.FLANEUR_GKEY;
+let M;
+if (USE_G) {
+  try { M = await G.makeMap(document.getElementById("map"), START); }
+  catch (e) { console.info("Google map unavailable, using OSM", e); }
+}
+if (!M) M = leafletMap();
+document.body.dataset.map = M.kind;
+const center = () => M.center();
 const markers = { from: null, to: null };
 let poiMarkers = [];
 
@@ -62,6 +86,7 @@ function setupSuggest(inputId, listId, key) {
     t = setTimeout(async () => {
       const c = center();
       try {
+        if (USE_G) { items = await G.autocomplete(q, c); act = -1; render(); return; }
         const r = await fetch(`${PHOTON}?q=${encodeURIComponent(q)}&limit=5&lat=${c.lat}&lon=${c.lng}`);
         const j = await r.json();
         items = j.features.map((f) => ({
@@ -77,12 +102,13 @@ function setupSuggest(inputId, listId, key) {
   function render() {
     list.innerHTML = items.map((it, i) => `<li data-i="${i}" class="${i === act ? "act" : ""}">${esc(it.name)}<small>${esc(it.sub)}</small></li>`).join("");
   }
-  function pick(i) {
+  async function pick(i) {
     const it = items[i];
     if (!it) return;
     input.value = it.name;
-    state[key] = { name: it.name, ll: it.ll };
     list.innerHTML = "";
+    try { if (!it.ll) it.ll = await G.placeLL(it.id); } catch { return; }
+    state[key] = { name: it.name, ll: it.ll };
     placeMarker(key);
   }
   list.addEventListener("mousedown", (e) => { const li = e.target.closest("li"); if (li) pick(+li.dataset.i); });
@@ -96,23 +122,26 @@ function setupSuggest(inputId, listId, key) {
 }
 async function geocodeOnce(q) {
   const c = center();
+  if (!q.trim()) throw new Error("Add a start and a destination.");
+  if (USE_G) { try { return await G.geocode(q, c); } catch (e) { if (/find/.test(e.message)) throw e; } }
   const r = await fetch(`${PHOTON}?q=${encodeURIComponent(q)}&limit=1&lat=${c.lat}&lon=${c.lng}`);
   const j = await r.json();
   if (!j.features.length) throw new Error(`Couldn't find “${q}”`);
   return { name: q, ll: j.features[0].geometry.coordinates };
 }
 function placeMarker(key) {
+  if (!state[key]) return;
   if (markers[key]) markers[key].remove();
-  const el = document.createElement("div");
-  el.style.cssText = `width:18px;height:18px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);background:${key === "from" ? "#1F3D2B" : "#E4572E"}`;
-  markers[key] = L.marker(toLL(state[key].ll), { icon: L.divIcon({ html: el.outerHTML, className: "", iconSize: [18, 18], iconAnchor: [9, 9] }), zIndexOffset: 1000 }).addTo(map);
+  const html = `<div style="width:18px;height:18px;box-sizing:border-box;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);background:${key === "from" ? "#1F3D2B" : "#E4572E"}"></div>`;
+  markers[key] = M.marker(state[key].ll, html, { size: [18, 18], z: 1000 });
   if (state.from && state.to) fitTo([state.from.ll, state.to.ll]);
-  else map.flyTo(toLL(state[key].ll), 15);
+  else M.flyTo(state[key].ll, 15);
 }
 function fitTo(coords) {
-  const b = L.latLngBounds(coords.map(toLL));
   const mobile = innerWidth < 700;
-  map.fitBounds(b, mobile ? { paddingTopLeft: [30, 60], paddingBottomRight: [30, Math.round(innerHeight * 0.74)] } : { paddingTopLeft: [450, 60], paddingBottomRight: [60, 60] });
+  const panel = document.getElementById("panel");
+  const bottom = mobile ? Math.max(80, Math.round(innerHeight - panel.getBoundingClientRect().top) + 16) : 60;
+  M.fit(coords, mobile ? { top: 50, left: 30, right: 30, bottom } : { top: 60, left: 450, right: 60, bottom: 60 });
 }
 
 $("#locate").addEventListener("click", () => {
@@ -149,6 +178,7 @@ updateDetourLabel();
 
 // ---------- data ----------
 async function osrm(coords) {
+  if (USE_G) { try { return await G.routes(coords); } catch (e) { console.info("Google routing failed, using OSRM", e.message); } }
   const path = coords.map((c) => `${c[0].toFixed(6)},${c[1].toFixed(6)}`).join(";");
   const alt = coords.length === 2 ? "&alternatives=3" : "";
   const r = await fetch(`${OSRM}${path}?overview=full&geometries=geojson&continue_straight=false${alt}`, { signal: AbortSignal.timeout(15000) }).catch(() => { throw new Error("Routing is slow right now. Try again in a moment."); });
@@ -317,26 +347,24 @@ async function search() {
     const pad = Math.max(0.004, dist(a, b) / 111320 * 0.35);
     const bbox = [Math.min(a[1], b[1]) - pad, Math.min(a[0], b[0]) - pad / Math.cos(rad(a[1])), Math.max(a[1], b[1]) + pad, Math.max(a[0], b[0]) + pad / Math.cos(rad(a[1]))];
     const key = bbox.map((x) => x.toFixed(3)).join(",");
-    if (poiCache.key !== key) poiCache = { key, pois: await overpass(bbox) };
-    state.pois = poiCache.pois;
+    if (poiCache.key !== key) {
+      let pois = USE_G ? await G.pois(a, b, Math.max(dist(a, b), fastest.dist * 0.7)) : [];
+      if (!pois.length) pois = await overpass(bbox);
+      poiCache = { key, pois };
+    }
+    // ignore places at the start or end themselves (your own building isn't a discovery)
+    state.pois = poiCache.pois.filter((p) => dist(p.ll, a) > 120 && dist(p.ll, b) > 120);
 
     status("Walking the options for you…");
     const routes = base.map((r, i) => ({ ...r, via: null, alt: i }));
     const wps = pickWaypoints(state.pois, a, b, fastest, 0.4);
-    for (const p of wps) {
-      try {
-        const [r] = await osrm([a, p.ll, b]);
-        if (r.dur <= fastest.dur * 1.45) routes.push({ ...r, via: p });
-      } catch { /* skip */ }
-    }
+    const jobs = wps.map((p) => osrm([a, p.ll, b]).then(([r]) => r.dur <= fastest.dur * 1.45 && routes.push({ ...r, via: p })).catch(() => {}));
     // two-stop combo through the two best anchors, ordered along the way
     if (wps.length >= 2) {
       const [p1, p2] = wps.slice(0, 2).sort((x, y) => dist(a, x.ll) - dist(a, y.ll));
-      try {
-        const [r] = await osrm([a, p1.ll, p2.ll, b]);
-        if (r.dur <= fastest.dur * 1.45) routes.push({ ...r, via: p1, via2: p2 });
-      } catch {}
+      jobs.push(osrm([a, p1.ll, p2.ll, b]).then(([r]) => r.dur <= fastest.dur * 1.45 && routes.push({ ...r, via: p1, via2: p2 })).catch(() => {}));
     }
+    await Promise.all(jobs);
     state.all = routes.map((r) => scoreRoute(r, state.pois));
     state.fastest = state.all[0];
     rerank(true);
@@ -457,15 +485,15 @@ function gmapsLink(r) {
 }
 
 function draw(fit) {
-  routeLayer.clearLayers();
+  M.clearLines();
   const order = state.routes.map((r, i) => i).sort((x, y) => (x === state.sel) - (y === state.sel));
   for (const i of order) {
     const r = state.routes[i], sel = i === state.sel;
     const color = r === state.fastest ? FAST_COLOR : COLORS[i % COLORS.length];
-    const ll = r.line.map(toLL);
-    L.polyline(ll, { color: "#fff", weight: sel ? 11 : 7, opacity: 0.9, lineCap: "round", lineJoin: "round" }).addTo(routeLayer);
-    L.polyline(ll, { color, weight: sel ? 6 : 4, opacity: sel ? 1 : 0.6, lineCap: "round", lineJoin: "round", dashArray: r === state.fastest ? "1 9" : null })
-      .on("click", () => { state.sel = i; draw(false); list(); showSel(); $("#panel").classList.remove("min"); }).addTo(routeLayer);
+    const z = sel ? 10 : 1;
+    if (r !== state.fastest) M.line(r.line, { color: "#fff", weight: sel ? 11 : 7, opacity: 0.9, z });
+    M.line(r.line, { color, weight: sel ? 6 : 4, opacity: sel ? 1 : 0.6, dash: r === state.fastest, z: z + 1 },
+      () => { state.sel = i; draw(false); list(); showSel(); $("#panel").classList.remove("min"); });
   }
   // POIs on selected route
   poiMarkers.forEach((m) => m.remove());
@@ -474,12 +502,10 @@ function draw(fit) {
   const icons = { green: "🌳", life: "☕", arch: "🏛", water: "💧" };
   const shown = ["green", "arch", "water", "life"].flatMap((k) => r.near[k].filter((p) => p.name).slice(0, k === "life" ? 6 : 4));
   for (const p of shown) {
-    const el = document.createElement("div");
-    el.textContent = icons[p.k];
-    el.style.cssText = "font-size:16px;background:#FBF6EC;border-radius:50%;width:26px;height:26px;display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer";
-    poiMarkers.push(L.marker(toLL(p.ll), { icon: L.divIcon({ html: el.outerHTML, className: "", iconSize: [26, 26], iconAnchor: [13, 13] }) }).bindPopup(`<div class="poi-pop">${esc(p.name)}</div>`, { closeButton: false }).addTo(map));
+    const html = `<div style="font-size:16px;background:#FBF6EC;border-radius:50%;width:26px;height:26px;display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer">${icons[p.k]}</div>`;
+    poiMarkers.push(M.marker(p.ll, html, { size: [26, 26], title: p.name, titleHtml: esc(p.name) }));
   }
-  if (fit) fitTo(state.routes.flatMap((r) => r.line));
+  if (fit) fitTo(state.routes.flatMap((r) => simplify(r.line)));
 }
 
 function status(msg) { const s = $("#status"); s.hidden = !msg; s.textContent = msg; }
